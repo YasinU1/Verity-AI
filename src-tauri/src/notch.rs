@@ -110,17 +110,21 @@ pub fn measure() -> NotchGeometry {
     let Some(screen) = NSScreen::mainScreen(mtm) else {
         return compute_notch(0.0, 0.0, 0.0, 0.0);
     };
-    let frame = screen.frame();
-    let screen_width = frame.size.width;
-    let safe_top = screen.safeAreaInsets().top;
-
-    // auxiliary areas only make sense once a notch is confirmed.
-    let (aux_left_max_x, aux_right_min_x) = if safe_top > 0.0 {
-        let left = screen.auxiliaryTopLeftArea();
-        let right = screen.auxiliaryTopRightArea();
-        (left.origin.x + left.size.width, right.origin.x)
-    } else {
-        (0.0, 0.0)
+    // These NSScreen reads are `unsafe` in objc2 (they touch AppKit state); they're safe
+    // here because we hold a MainThreadMarker and a live main screen.
+    let (screen_width, safe_top, aux_left_max_x, aux_right_min_x) = unsafe {
+        let frame = screen.frame();
+        let screen_width = frame.size.width;
+        let safe_top = screen.safeAreaInsets().top;
+        // auxiliary areas only make sense once a notch is confirmed.
+        let (l, r) = if safe_top > 0.0 {
+            let left = screen.auxiliaryTopLeftArea();
+            let right = screen.auxiliaryTopRightArea();
+            (left.origin.x + left.size.width, right.origin.x)
+        } else {
+            (0.0, 0.0)
+        };
+        (screen_width, safe_top, l, r)
     };
 
     compute_notch(safe_top, aux_left_max_x, aux_right_min_x, screen_width)

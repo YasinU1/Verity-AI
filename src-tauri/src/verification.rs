@@ -887,6 +887,102 @@ mod tests {
         let mk = |v: &str| serde_json::json!({"verdict": v, "rationale": "r", "correction": ""});
         assert_eq!(parse_verdict_args(&mk("misleading"), vec![]).0, Verdict::Misleading);
         assert_eq!(parse_verdict_args(&mk("false"), vec![]).0, Verdict::False);
+        assert_eq!(parse_verdict_args(&mk("verified"), vec![]).0, Verdict::Verified);
+        assert_eq!(parse_verdict_args(&mk("context_needed"), vec![]).0, Verdict::ContextNeeded);
         assert_eq!(parse_verdict_args(&mk("garbage"), vec![]).0, Verdict::Unverifiable);
+    }
+
+    #[test]
+    fn prefetch_uses_instant_and_followup_uses_fast() {
+        assert_eq!(exa_request_body("q", ExaMode::Instant)["mode"], "instant");
+        assert_eq!(exa_request_body("q", ExaMode::Fast)["mode"], "fast");
+    }
+
+    #[test]
+    fn anthropic_tools_use_input_schema_and_withhold_search() {
+        let with = anthropic_tools(true);
+        let names: Vec<&str> = with.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        assert!(names.contains(&"search_web"));
+        assert!(names.contains(&"submit_verdict"));
+        // Anthropic uses input_schema, not the OpenAI parameters wrapper.
+        assert!(with.iter().all(|t| t.get("input_schema").is_some()));
+
+        let without = anthropic_tools(false);
+        let names: Vec<&str> = without.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        assert!(!names.contains(&"search_web"));
+    }
+
+    #[test]
+    fn user_message_orders_context_evidence_then_claim() {
+        let msg = build_user_message("the claim", "prior debate turn", &[]);
+        let ctx = msg.find("DEBATE CONTEXT").unwrap();
+        let claim = msg.find("CLAIM TO CHECK").unwrap();
+        assert!(ctx < claim);
+    }
+
+    #[test]
+    fn user_message_without_brief_or_evidence_is_just_the_claim() {
+        let msg = build_user_message("the claim", "", &[]);
+        assert!(!msg.contains("DEBATE CONTEXT"));
+        assert!(!msg.contains("EVIDENCE"));
+        assert!(msg.contains("CLAIM TO CHECK"));
+    }
+
+    #[test]
+    fn dedup_sources_removes_repeated_urls() {
+        let mut s = vec![
+            Source { url: "https://a.com".into(), ..Default::default() },
+            Source { url: "https://a.com".into(), ..Default::default() },
+            Source { url: "https://b.com".into(), ..Default::default() },
+        ];
+        dedup_sources(&mut s);
+        assert_eq!(s.len(), 2);
+    }
+
+    #[test]
+    fn render_sources_includes_dates_and_handles_empty() {
+        assert_eq!(render_sources(&[]), "No results.");
+        let rendered = render_sources(&[Source {
+            title: "T".into(),
+            url: "https://x.com".into(),
+            published_date: Some("2024-01-01".into()),
+            text: "body".into(),
+        }]);
+        assert!(rendered.contains("2024-01-01"));
+        assert!(rendered.contains("https://x.com"));
+    }
+
+    #[test]
+    fn statistics_and_scripture_can_both_apply() {
+        // "the Quran mentions 40 days" carries both a figure and a scripture citation.
+        let p = build_system_prompt("the Quran mentions 40 days of something", true);
+        assert!(p.contains("STATISTICS"));
+        assert!(p.contains("SCRIPTURE"));
+    }
+
+    #[test]
+    fn scripture_forces_a_lookup_across_traditions() {
+        for t in ["the Torah says", "the Hadith records", "the Gita teaches", "the Guru Granth"] {
+            assert!(must_look_it_up(t), "{t} should force a lookup");
+        }
+    }
+
+    #[test]
+    fn has_figure_covers_digits_and_words_and_rejects_none() {
+        assert!(has_figure("it rose 8 points"));
+        assert!(has_figure("about forty of them"));
+        assert!(!has_figure("the weather was pleasant"));
+    }
+
+    #[test]
+    fn cites_scripture_positive_and_negative() {
+        assert!(cites_scripture("as the surah explains"));
+        assert!(cites_scripture("Psalm 23 says"));
+        assert!(!cites_scripture("the quarterly report says"));
+    }
+
+    #[test]
+    fn choose_provider_prefers_openai_when_both_present_and_auto() {
+        assert_eq!(choose_provider(Some("a"), Some("b"), "auto"), Some(Provider::OpenAI));
     }
 }

@@ -51,16 +51,17 @@ pub fn adjust_collection_behavior(current: u64) -> u64 {
 #[cfg(all(target_os = "macos", feature = "appkit"))]
 mod imp {
     use super::*;
-    use objc2::rc::Retained;
     use objc2::runtime::{AnyClass, AnyObject, Bool, ClassBuilder, Sel};
     use objc2::{msg_send, sel};
     use once_cell::sync::OnceCell;
 
-    extern "C" fn can_become_key(_this: &AnyObject, _cmd: Sel) -> Bool {
+    // Raw-pointer receiver avoids the higher-ranked-lifetime mismatch that a `&AnyObject`
+    // receiver hits when cast to a concrete fn type for add_method.
+    extern "C" fn can_become_key(_this: *mut AnyObject, _cmd: Sel) -> Bool {
         // Losing this makes text fields silently swallow every keystroke.
         Bool::YES
     }
-    extern "C" fn can_become_main(_this: &AnyObject, _cmd: Sel) -> Bool {
+    extern "C" fn can_become_main(_this: *mut AnyObject, _cmd: Sel) -> Bool {
         Bool::NO
     }
 
@@ -74,11 +75,11 @@ mod imp {
             unsafe {
                 builder.add_method(
                     sel!(canBecomeKeyWindow),
-                    can_become_key as extern "C" fn(&AnyObject, Sel) -> Bool,
+                    can_become_key as extern "C" fn(*mut AnyObject, Sel) -> Bool,
                 );
                 builder.add_method(
                     sel!(canBecomeMainWindow),
-                    can_become_main as extern "C" fn(&AnyObject, Sel) -> Bool,
+                    can_become_main as extern "C" fn(*mut AnyObject, Sel) -> Bool,
                 );
             }
             builder.register() as *const AnyClass as usize
@@ -101,14 +102,11 @@ mod imp {
             let current_class: *const AnyClass = msg_send![obj, class];
             let already: Bool = msg_send![obj, isKindOfClass: target];
             if !already.as_bool() && current_class != (target as *const AnyClass) {
-                use objc2::runtime::AnyObject as O;
                 // object_setClass onto our NSPanel subclass.
-                let _: *const AnyClass = {
-                    extern "C" {
-                        fn object_setClass(obj: *mut O, cls: *const AnyClass) -> *const AnyClass;
-                    }
-                    object_setClass(ns_window, target)
-                };
+                extern "C" {
+                    fn object_setClass(obj: *mut AnyObject, cls: *const AnyClass) -> *const AnyClass;
+                }
+                let _ = object_setClass(ns_window, target);
             }
 
             // Style mask: OR in the non-activating panel bit.
@@ -126,8 +124,6 @@ mod imp {
             // Level LAST — setAlwaysOnTop (called earlier by Tauri) resets it, so the
             // screen-saver level must be applied after.
             let _: () = msg_send![obj, setLevel: NS_SCREEN_SAVER_WINDOW_LEVEL];
-
-            let _ = Retained::<O>::retain(ns_window); // keep a ref alive across the call
         }
     }
 }
@@ -191,5 +187,21 @@ mod tests {
     fn screen_saver_level_outranks_floating() {
         // Floating is 3; screen-saver is 1000 — must be far above.
         assert!(NS_SCREEN_SAVER_WINDOW_LEVEL > 3);
+    }
+
+    #[test]
+    fn adjust_is_idempotent() {
+        // Applying twice must equal applying once (safe to call defensively).
+        let once = adjust_collection_behavior(NS_CB_MANAGED);
+        let twice = adjust_collection_behavior(once);
+        assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn adjust_preserves_bits_it_does_not_manage() {
+        // A bit outside both the clear-set and the set-set is left untouched.
+        let unrelated = 1u64 << 20;
+        let out = adjust_collection_behavior(NS_CB_MANAGED | unrelated);
+        assert_ne!(out & unrelated, 0);
     }
 }

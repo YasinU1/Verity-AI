@@ -116,4 +116,17 @@ mod tests {
         let (x, _) = compute_overlay_position(1920.0, 0.0, 1920.0, 1080.0, 440.0, 760.0, 16.0);
         assert_eq!(x, 1920.0 + 1920.0 - 440.0 - 16.0);
     }
+
+    #[test]
+    fn bottom_right_corner_counts_as_inside() {
+        let z = zone();
+        assert!(point_in_rect(z.x + z.width, z.y + z.height, &z));
+    }
+
+    #[test]
+    fn a_taller_window_than_the_screen_still_stays_on_screen() {
+        // Degenerate case: window taller than the monitor — y must not go negative.
+        let (_, y) = compute_overlay_position(0.0, 0.0, 800.0, 400.0, 440.0, 900.0, 16.0);
+        assert!(y >= 0.0);
+    }
 }

@@ -508,4 +508,25 @@ mod tests {
         assert_eq!(parse_server_event(d).unwrap().kind, TranscriptKind::Partial);
         assert!(parse_server_event(r#"{"type":"response.created"}"#).is_none());
     }
+
+    #[test]
+    fn parses_error_events() {
+        let e = r#"{"type":"error","error":{"message":"bad request"}}"#;
+        let ev = parse_server_event(e).unwrap();
+        assert_eq!(ev.kind, TranscriptKind::Error);
+        assert_eq!(ev.text, "bad request");
+    }
+
+    #[test]
+    fn generic_transient_closes_are_retryable() {
+        assert!(is_retryable_close(1000, "normal closure"));
+        assert!(is_retryable_close(1012, "service restart"));
+    }
+
+    #[test]
+    fn empty_frame_has_zero_rms_and_never_commits() {
+        let mut d = TurnDetector::new(RATE);
+        assert_eq!(TurnDetector::rms(&[]), 0.0);
+        assert_eq!(d.push_frame(&[]), None);
+    }
 }

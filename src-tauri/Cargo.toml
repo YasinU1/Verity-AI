@@ -47,7 +47,7 @@ url = "2"
 objc2 = { version = "0.5", optional = true }
 objc2-app-kit = { version = "0.2", optional = true, features = [
   "NSWindow", "NSPanel", "NSScreen", "NSResponder", "NSApplication",
-  "NSWorkspace", "NSRunningApplication", "NSView",
+  "NSWorkspace", "NSRunningApplication", "NSView", "NSEvent",
 ] }
 objc2-foundation = { version = "0.2", optional = true, features = [
   "NSString", "NSGeometry", "NSArray", "NSThread",

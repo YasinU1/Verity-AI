@@ -388,4 +388,27 @@ mod tests {
             AutoStartDecision::StartBrowserFallback
         );
     }
+
+    #[test]
+    fn decide_does_nothing_for_non_browser_or_unavailable() {
+        assert_eq!(
+            decide(&AutoStartStatus::NotBrowser { bundle_id: "us.zoom.xos".into(), name: "Zoom".into() }),
+            AutoStartDecision::DoNothing
+        );
+        assert_eq!(decide(&AutoStartStatus::Unavailable), AutoStartDecision::DoNothing);
+    }
+
+    #[test]
+    fn non_browser_frontmost_never_gets_an_apple_event() {
+        // read_active_tab short-circuits for non-browsers (no osascript, no prompt).
+        let s = read_active_tab("us.zoom.xos");
+        assert!(matches!(s, AutoStartStatus::NotBrowser { .. }));
+    }
+
+    #[test]
+    fn permission_denied_is_the_only_one_way_fixable_status() {
+        // A blank URL with no error is treated as a permission problem the UI can fix.
+        let s = classify_osascript("com.apple.Safari", BrowserKind::Safari, None, None);
+        assert_eq!(s, AutoStartStatus::PermissionDenied { bundle_id: "com.apple.Safari".into() });
+    }
 }
