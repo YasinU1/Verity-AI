@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Both windows are frameless + transparent. The webview must not paint its own
+   opaque background or the transparency (and click-through) is lost. */
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: transparent;
+  color: #f5f5f7;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+/* The overlay only paints a small region; the rest of the window is transparent
+   and must let clicks through (Rust toggles ignore_cursor_events by cursor poll). */
+.hud-paint {
+  -webkit-app-region: no-drag;
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
