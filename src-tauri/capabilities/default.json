@@ -1,0 +1,16 @@
+{
+  "identifier": "default",
+  "description": "Core permissions for Verity's dashboard and HUD windows.",
+  "windows": ["main", "overlay"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-ignore-cursor-events",
+    "core:webview:allow-set-webview-focus",
+    "core:event:default",
+    "shell:allow-open"
+  ]
+}
